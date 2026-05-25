@@ -1235,7 +1235,7 @@
           </DropdownMenu.Root>
         {/if}
 
-        <Button onclick={addNewTask}>
+        <Button onclick={() => addNewTask()}>
           <Plus class="mr-2 h-4 w-4" />
           New Task
         </Button>
@@ -1481,7 +1481,7 @@
               <div class="py-12 text-center">
                 <Calendar class="text-muted-foreground/50 mx-auto mb-4 h-12 w-12" />
                 <p class="text-muted-foreground text-sm">No tasks scheduled for this date</p>
-                <Button onclick={addNewTask} variant="outline" size="sm" class="mt-4">
+                <Button onclick={() => addNewTask()} variant="outline" size="sm" class="mt-4">
                   <Plus class="mr-2 h-4 w-4" />
                   Add Task
                 </Button>
