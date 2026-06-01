@@ -1,4 +1,9 @@
-from bcrm_mcp.entities import ENTITIES, EntityError, resolve_path
+from bcrm_mcp.entities import (
+    CONFIRM_REQUIRED_ACTIONS,
+    ENTITIES,
+    EntityError,
+    resolve_path,
+)
 
 MAX_LIMIT = 50
 
@@ -35,13 +40,22 @@ async def crm_delete(client, entity, id, confirm=False):
     return await client.delete(resolve_path(entity, id))
 
 
-async def crm_action(client, entity, id, action, params=None):
-    """Run a non-CRUD action (e.g. convert, add_comment). See list_actions()."""
+async def crm_action(client, entity, id, action, params=None, confirm=False):
+    """Run a non-CRUD action (e.g. convert, add_comment). See list_actions().
+
+    Outward-facing/irreversible actions (CONFIRM_REQUIRED_ACTIONS, e.g. `send`,
+    which emails a customer) require confirm=True, mirroring crm_delete.
+    """
     if entity not in ENTITIES:
         raise EntityError(f"Unknown entity '{entity}'.")
     allowed = ENTITIES[entity]["actions"]
     if action not in allowed:
         raise ValueError(f"Action '{action}' not allowed for {entity}. Allowed: {allowed}")
+    if action in CONFIRM_REQUIRED_ACTIONS and not confirm:
+        raise ValueError(
+            f"Outward-facing op '{action}' has a real side effect "
+            f"(e.g. emails a customer): pass confirm=true to proceed."
+        )
     return await client.post(f"{resolve_path(entity, id)}{action}/", json=params or {})
 
 

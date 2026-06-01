@@ -16,6 +16,12 @@ ENTITIES = {
     "solutions":     {"path": "/api/cases/solutions/", "actions": []},
 }
 
+# Actions with an outward-facing / irreversible side effect (e.g. emailing a
+# customer). Like crm_delete, these require an explicit confirm=True so an agent
+# can't trigger them off a misread instruction. Keyed by action name across all
+# entities — keep it small and conservative.
+CONFIRM_REQUIRED_ACTIONS = {"send"}
+
 
 def resolve_path(entity, pk=None):
     if entity not in ENTITIES:

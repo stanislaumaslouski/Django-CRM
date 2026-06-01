@@ -74,10 +74,16 @@ def build_server(client=None):
 
     @mcp.tool(annotations=_WRITE)
     async def crm_action(
-        entity: str, id: str, action: str, params: dict | None = None
+        entity: str,
+        id: str,
+        action: str,
+        params: dict | None = None,
+        confirm: bool = False,
     ):
-        """Run a non-CRUD action (e.g. convert a lead, add_comment, send an invoice). Call list_actions to see allowed actions per entity."""
-        return await tools.crm_action(get_client(), entity, id, action, params)
+        """Run a non-CRUD action (e.g. convert a lead, add_comment, send an invoice). Call list_actions to see allowed actions per entity. Outward-facing actions like `send` (emails a customer) require confirm=true."""
+        return await tools.crm_action(
+            get_client(), entity, id, action, params, confirm
+        )
 
     @mcp.tool(annotations=_READ_ONLY)
     async def crm_describe(entity: str):

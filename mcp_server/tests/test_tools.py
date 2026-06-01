@@ -61,6 +61,25 @@ async def test_action_allowed_posts_to_action_path():
     assert c.calls[0] == ("POST", "/api/leads/1/convert/", {"x": 1})
 
 @pytest.mark.asyncio
+async def test_outward_facing_action_requires_confirm():
+    c = FakeClient()
+    with pytest.raises(ValueError, match="confirm"):
+        await tools.crm_action(c, "invoices", "1", "send")
+    assert c.calls == []  # nothing sent without confirm
+
+@pytest.mark.asyncio
+async def test_outward_facing_action_with_confirm_posts():
+    c = FakeClient()
+    await tools.crm_action(c, "invoices", "1", "send", confirm=True)
+    assert c.calls[0] == ("POST", "/api/invoices/1/send/", {})
+
+@pytest.mark.asyncio
+async def test_non_outward_action_does_not_require_confirm():
+    c = FakeClient()
+    await tools.crm_action(c, "leads", "1", "add_comment", {"comment": "hi"})
+    assert c.calls[0] == ("POST", "/api/leads/1/add_comment/", {"comment": "hi"})
+
+@pytest.mark.asyncio
 async def test_list_actions_returns_map():
     m = tools.list_actions()
     assert m["leads"] == ["convert", "add_comment"]

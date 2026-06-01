@@ -906,6 +906,9 @@ class PersonalAccessToken(BaseOrgModel):
     name = models.CharField(max_length=255)
     token_hash = models.CharField(max_length=64, unique=True, db_index=True)
     token_prefix = models.CharField(max_length=20)
+    # NOTE: scopes are stored for forward-compatibility but are NOT enforced in
+    # Phase 1 — a token always inherits the owning profile's full role/permissions.
+    # Do not treat `scopes` as a trust boundary until enforcement lands.
     scopes = models.JSONField(default=list, blank=True)
     expires_at = models.DateTimeField(null=True, blank=True)
     last_used_at = models.DateTimeField(null=True, blank=True)
@@ -930,6 +933,7 @@ class PersonalAccessToken(BaseOrgModel):
             token_prefix=raw[:13],
             scopes=scopes or [],
             expires_at=expires_at,
+            created_by=profile.user,
         )
         return raw, pat
 
