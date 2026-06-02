@@ -37,6 +37,7 @@ BottleCRM is a full-featured Customer Relationship Management system designed fo
 - **Tags** - Flexible tagging system for organizing records
 - **Email Integration** - AWS SES integration for transactional emails
 - **Background Tasks** - Celery + Redis for async task processing
+- **AI Agents (MCP)** - Built-in [Model Context Protocol](https://modelcontextprotocol.io) server (`mcp_server/`) lets Claude, Cursor, Codex, Gemini and any MCP client search, create and update records via a personal access token — acting as you, with your role and permissions. See [`mcp_server/README.md`](mcp_server/README.md).
 
 ## Tech Stack
 
@@ -139,6 +140,16 @@ uv run celery -A crm worker --loglevel=INFO
 - **API Documentation**: http://localhost:8000/swagger-ui/
 - **Admin Panel**: http://localhost:8000/admin/
 
+### Connect your AI agent (MCP)
+
+Let Claude, Cursor, Codex, Gemini, or any MCP client work in your CRM:
+
+1. In the app, go to **Settings → API Tokens** and create a personal access token (shown once).
+2. Register the `bcrm-mcp` server in your AI client, passing `BCRM_BASE_URL` (your API host, e.g. `http://localhost:8000`) and `BCRM_TOKEN` (the token). The token page shows ready-to-paste config for each client.
+3. Restart the client and start asking.
+
+The agent authenticates **as you** and inherits your role, org and RLS scope — it can't see or do anything you can't. Full setup, the tool list, and the security model are in [`mcp_server/README.md`](mcp_server/README.md).
+
 ## Docker Setup
 
 Run the full stack (backend, frontend, PostgreSQL, Redis, Celery) with a single command:
@@ -204,6 +215,8 @@ Django-CRM/
 │   │       └── (no-layout)/ # Auth pages (login, etc.)
 │   ├── static/            # Static assets
 │   └── Dockerfile         # Frontend dev container
+├── mcp_server/             # MCP server (bcrm-mcp) for AI agents
+│   └── src/bcrm_mcp/      # FastMCP tools over the REST API (stdio transport)
 ├── docker/                 # Docker support files
 │   ├── backend/
 │   │   └── entrypoint.sh  # DB wait + migrate + runserver

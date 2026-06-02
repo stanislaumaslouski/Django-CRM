@@ -53,7 +53,8 @@ same CRM access as that user, scoped to their org — treat it like a password.
 
 In the CRM go to **Settings → API Tokens**, create a token, and copy the
 `bcrm_pat_…` value. **The raw token is shown only once at creation.** You can
-revoke it from the same screen at any time. *(This UI ships with Phase D.)*
+revoke it from the same screen at any time. That page also shows ready-to-paste
+config for each client below, pre-filled with your API host and token.
 
 ### Option B — Django shell (local / dev)
 
@@ -68,11 +69,22 @@ The PAT table is created by the `common` app migrations — if you get a
 `relation "personal_access_token" does not exist` error, run
 `uv run python manage.py migrate common` first.
 
-## Claude Desktop configuration
+## Client configuration
 
-Add an entry to your Claude Desktop MCP config (`claude_desktop_config.json`).
+Register `bcrm-mcp` in your AI client and pass `BCRM_BASE_URL` + `BCRM_TOKEN` as
+environment variables. **Claude Desktop, Cursor, and Gemini CLI share the
+identical `mcpServers` JSON schema** — only the config file differs. **Codex CLI
+uses TOML.** Replace `http://localhost:8000` with your API host (e.g.
+`https://api.bottlecrm.io`) and paste your `bcrm_pat_…` token.
 
-### Once the package is published
+| Client         | Config file                                                            | Format |
+| -------------- | ---------------------------------------------------------------------- | ------ |
+| Claude Desktop | `claude_desktop_config.json` (Settings → Developer → Edit Config)      | JSON   |
+| Cursor         | `~/.cursor/mcp.json` (global) or `.cursor/mcp.json` (per project)      | JSON   |
+| Gemini CLI     | `~/.gemini/settings.json`                                              | JSON   |
+| Codex CLI      | `~/.codex/config.toml`                                                  | TOML   |
+
+### JSON clients (Claude Desktop / Cursor / Gemini CLI)
 
 ```json
 {
@@ -89,11 +101,26 @@ Add an entry to your Claude Desktop MCP config (`claude_desktop_config.json`).
 }
 ```
 
+### Codex CLI (TOML)
+
+```toml
+[mcp_servers.bottlecrm]
+command = "uvx"
+args = ["bcrm-mcp"]
+
+[mcp_servers.bottlecrm.env]
+BCRM_BASE_URL = "http://localhost:8000"
+BCRM_TOKEN = "bcrm_pat_…"
+```
+
+Restart the client after editing its config; it launches `bcrm-mcp` for you and
+discovers the tools automatically.
+
 ### Until published — run from a local checkout
 
-`bcrm-mcp` is not yet on PyPI, so point `uv run` at this directory instead. Use
-`--directory` with an absolute path so it works regardless of the client's
-working directory:
+`bcrm-mcp` is not yet on PyPI, so point the command at this directory instead of
+using `uvx`. Use `--directory` with an absolute path so it works regardless of
+the client's working directory. For the JSON clients:
 
 ```json
 {
@@ -110,6 +137,8 @@ working directory:
 }
 ```
 
+For Codex, set `command = "uv"` and
+`args = ["run", "--directory", "/abs/path/to/mcp_server", "bcrm-mcp"]`.
 (Equivalently, from inside `mcp_server` you can just run `uv run bcrm-mcp`.)
 
 ## Available tools
@@ -125,7 +154,7 @@ invoices, solutions**.
 | `crm_create`   | write       | Create a record from a `data` object (validated server-side by the API).                                          |
 | `crm_update`   | write       | Partially update a record (PATCH semantics) from a `data` object.                                                 |
 | `crm_delete`   | destructive | Delete a record. **Requires `confirm=true`** — refuses to run otherwise.                                          |
-| `crm_action`   | write       | Run a non-CRUD action on a record (see `list_actions`), e.g. `convert`, `add_comment`, `send`.                    |
+| `crm_action`   | write       | Run a non-CRUD action on a record (see `list_actions`), e.g. `convert`, `add_comment`, `send`. Outward-facing actions (`send`) **require `confirm=true`**. |
 | `crm_describe` | read-only   | Return an entity's fields, types, enums, and which are required — derived from the live OpenAPI schema.           |
 | `list_actions` | read-only   | Return the allowed non-CRUD actions for each entity.                                                              |
 
@@ -144,6 +173,9 @@ invoices, solutions**.
 
 > Note: solutions are served under the **cases** app at `/api/cases/solutions/`,
 > not at a top-level `/api/solutions/`.
+>
+> `send` is outward-facing (emails a customer), so `crm_action` requires
+> `confirm=true` for it — see the security model below.
 
 ## Security model
 
@@ -156,8 +188,10 @@ invoices, solutions**.
   it does not re-implement (or relax) any of those checks.
 - **Read limits.** `crm_search` caps `limit` at 50 regardless of what the agent
   requests, to avoid pulling unbounded result sets.
-- **Destructive ops are gated.** `crm_delete` refuses to run without
-  `confirm=true`, so a model can't delete a record by accident.
+- **Destructive & outward-facing ops are gated.** `crm_delete` refuses to run
+  without `confirm=true`, and so do outward-facing actions like
+  `crm_action(..., action="send")` (which emails a customer) — so a model can't
+  delete a record or send an invoice by accident.
 - **Tokens are revocable.** Revoke a PAT from the CRM (Settings → API Tokens) to
   immediately cut off an agent. Tokens may also carry an expiry.
 - **Never commit a token.** Keep `BCRM_TOKEN` out of source control, logs, and

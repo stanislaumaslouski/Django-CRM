@@ -1,14 +1,21 @@
 import { fail } from '@sveltejs/kit';
+import { env } from '$env/dynamic/public';
 import { apiRequest } from '$lib/api-helpers.js';
+
+// The MCP server runs on the user's own machine, so BCRM_BASE_URL must be the
+// PUBLIC API host (e.g. https://api.bottlecrm.io) — the same base the browser
+// talks to. PUBLIC_DJANGO_API_URL is that host with no /api suffix, which is
+// exactly what the MCP client expects (it appends /api/... itself).
+const apiBaseUrl = env.PUBLIC_DJANGO_API_URL || 'https://api.bottlecrm.io';
 
 /** @type {import('./$types').PageServerLoad} */
 export async function load({ cookies, locals }) {
   try {
     const data = await apiRequest('/profile/tokens/', {}, { cookies, org: locals?.org });
-    return { tokens: data.tokens || [] };
+    return { tokens: data.tokens || [], baseUrl: apiBaseUrl };
   } catch (err) {
     console.error('Failed to load API tokens:', err);
-    return { tokens: [], loadError: err?.message || 'Failed to load tokens' };
+    return { tokens: [], baseUrl: apiBaseUrl, loadError: err?.message || 'Failed to load tokens' };
   }
 }
 

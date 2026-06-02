@@ -23,6 +23,9 @@
   let { data, form } = $props();
 
   const tokens = $derived(data.tokens || []);
+  // Real, ready-to-paste API host (e.g. https://api.bottlecrm.io). The MCP
+  // client appends /api/... itself, so this is exactly BCRM_BASE_URL.
+  const baseUrl = $derived(data.baseUrl || 'https://api.bottlecrm.io');
 
   let formName = $state('');
   let formExpiresAt = $state('');
@@ -33,19 +36,60 @@
   /** @type {string} */
   let confirmingId = $state('');
   let helpOpen = $state(false);
+  let configCopied = $state(false);
+  let selectedClient = $state('claude');
 
-  const claudeConfig = `{
+  // The just-created raw token if we have it, else a paste-your-token hint. We
+  // can only ever show the real token in the same response that created it.
+  const tokenValue = $derived(form?.created?.token || 'bcrm_pat_…paste-your-token');
+
+  /**
+   * MCP clients we give a ready-to-paste config for. Claude Desktop, Cursor and
+   * Gemini CLI share the identical `mcpServers` JSON schema (only the config
+   * file differs); Codex CLI uses TOML.
+   */
+  const CLIENTS = [
+    { id: 'claude', label: 'Claude Desktop', lang: 'json', file: 'claude_desktop_config.json — Settings → Developer → Edit Config' },
+    { id: 'cursor', label: 'Cursor', lang: 'json', file: '~/.cursor/mcp.json (global) or .cursor/mcp.json (per project)' },
+    { id: 'codex', label: 'Codex CLI', lang: 'toml', file: '~/.codex/config.toml' },
+    { id: 'gemini', label: 'Gemini CLI', lang: 'json', file: '~/.gemini/settings.json' }
+  ];
+
+  /** @param {string} base @param {string} token */
+  function jsonConfig(base, token) {
+    return `{
   "mcpServers": {
     "bottlecrm": {
       "command": "uvx",
       "args": ["bcrm-mcp"],
       "env": {
-        "BCRM_BASE_URL": "<your CRM URL>",
-        "BCRM_TOKEN": "bcrm_pat_… (paste the token you just created)"
+        "BCRM_BASE_URL": "${base}",
+        "BCRM_TOKEN": "${token}"
       }
     }
   }
 }`;
+  }
+
+  /** @param {string} base @param {string} token */
+  function tomlConfig(base, token) {
+    return `[mcp_servers.bottlecrm]
+command = "uvx"
+args = ["bcrm-mcp"]
+
+[mcp_servers.bottlecrm.env]
+BCRM_BASE_URL = "${base}"
+BCRM_TOKEN = "${token}"`;
+  }
+
+  const selectedClientMeta = $derived(
+    CLIENTS.find((c) => c.id === selectedClient) || CLIENTS[0]
+  );
+  const configSnippet = $derived(
+    selectedClientMeta.lang === 'toml'
+      ? tomlConfig(baseUrl, tokenValue)
+      : jsonConfig(baseUrl, tokenValue)
+  );
 
   $effect(() => {
     if (form?.created?.token) {
@@ -53,6 +97,9 @@
       formName = '';
       formExpiresAt = '';
       copied = false;
+      // Surface the connect instructions immediately — the config now carries
+      // the real token, which the user can only copy from this one response.
+      helpOpen = true;
     } else if (form?.revoked) {
       toast.success('Token revoked');
       confirmingId = '';
@@ -69,6 +116,18 @@
       copied = true;
       toast.success('Token copied to clipboard');
       setTimeout(() => (copied = false), 2000);
+    } catch {
+      toast.error('Could not copy — select and copy manually');
+    }
+  }
+
+  /** @param {string} value */
+  async function copyConfig(value) {
+    try {
+      await navigator.clipboard.writeText(value);
+      configCopied = true;
+      toast.success('Config copied to clipboard');
+      setTimeout(() => (configCopied = false), 2000);
     } catch {
       toast.error('Could not copy — select and copy manually');
     }
@@ -305,19 +364,65 @@
           <ChevronRight class="h-4 w-4 text-[var(--text-secondary)]" />
         {/if}
         <KeyRound class="h-4 w-4 text-[var(--text-secondary)]" />
-        <span class="text-base font-medium text-[var(--text-primary)]">
-          Connect your AI (Claude Desktop)
-        </span>
+        <span class="text-base font-medium text-[var(--text-primary)]"> Connect your AI </span>
       </button>
       {#if helpOpen}
         <div class="space-y-3 border-t border-[var(--border-default)] p-4">
+          <!-- Client picker -->
+          <div class="flex flex-wrap gap-2">
+            {#each CLIENTS as client (client.id)}
+              <Button
+                type="button"
+                size="sm"
+                variant={selectedClient === client.id ? 'default' : 'outline'}
+                onclick={() => (selectedClient = client.id)}
+              >
+                {client.label}
+              </Button>
+            {/each}
+          </div>
+
           <p class="text-sm text-[var(--text-secondary)]">
-            Add the following to your Claude Desktop MCP config, replacing
-            <code class="font-mono text-xs">BCRM_BASE_URL</code> with your CRM URL and
-            <code class="font-mono text-xs">BCRM_TOKEN</code> with the token you just created.
+            Add this to
+            <code class="font-mono text-xs text-[var(--text-primary)]">{selectedClientMeta.file}</code
+            >, then restart {selectedClientMeta.label}.
+            {#if form?.created?.token}
+              The token below is yours — it's shown only this once.
+            {:else}
+              Replace <code class="font-mono text-xs">BCRM_TOKEN</code> with a token you created above.
+            {/if}
           </p>
-          <pre
-            class="overflow-x-auto rounded-md border border-[var(--border-default)] bg-[var(--surface-muted)] p-3 font-mono text-xs text-[var(--text-primary)]">{claudeConfig}</pre>
+
+          <div class="relative">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              class="absolute right-2 top-2 gap-1"
+              onclick={() => copyConfig(configSnippet)}
+            >
+              {#if configCopied}
+                <Check class="h-3.5 w-3.5" />
+                Copied
+              {:else}
+                <Copy class="h-3.5 w-3.5" />
+                Copy
+              {/if}
+            </Button>
+            <pre
+              class="overflow-x-auto rounded-md border border-[var(--border-default)] bg-[var(--surface-muted)] p-3 pr-20 font-mono text-xs text-[var(--text-primary)]">{configSnippet}</pre>
+          </div>
+
+          <p class="text-xs text-[var(--text-secondary)]">
+            Requires <a
+              href="https://docs.astral.sh/uv/"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="underline">uv</a
+            >
+            (provides <code class="font-mono">uvx</code>) on your machine. The agent acts as you and
+            inherits your role — it can't see or do anything you can't.
+          </p>
         </div>
       {/if}
     </section>
